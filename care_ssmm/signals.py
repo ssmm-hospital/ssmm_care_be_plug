@@ -9,7 +9,7 @@ from care.emr.resources.charge_item.apply_charge_item_definition import (
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions
 
-SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "system:registration-fee"
+SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 PRICE_COMPONENTS = [{"amount": 50, "monetary_component_type": "base"}]
 DIFF_DAYS = 180
 
