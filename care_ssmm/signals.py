@@ -29,7 +29,6 @@ def handle_registration_fee(sender, instance, **kwargs):
     resource_category = ResourceCategory.objects.filter(
         slug=registration_resource_category_slug,
     ).first()
-    charge_item_definition = None
 
     if not resource_category:
         resource_category = ResourceCategory.objects.create(
@@ -40,12 +39,10 @@ def handle_registration_fee(sender, instance, **kwargs):
             resource_type="charge_item_definition",
             resource_sub_type="all:other",
         )
-    else:
-        charge_item_definition = ChargeItemDefinition.objects.filter(
-            slug=SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG,
-            facility=facility,
-            category=resource_category,
-        ).first()
+    charge_item_definition = ChargeItemDefinition.objects.filter(
+        slug=SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG,
+        facility=facility,
+    ).first()
 
     if not charge_item_definition:
         charge_item_definition = ChargeItemDefinition.objects.create(
@@ -57,6 +54,13 @@ def handle_registration_fee(sender, instance, **kwargs):
             status="active",
             category=resource_category,
         )
+    elif (
+        not charge_item_definition.category
+        or charge_item_definition.category != resource_category
+    ):
+        charge_item_definition.category = resource_category
+        charge_item_definition.save()
+
     charge_item = (
         ChargeItem.objects.filter(
             patient=patient,
