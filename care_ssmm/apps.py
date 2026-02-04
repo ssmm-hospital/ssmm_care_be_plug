@@ -8,3 +8,4 @@ class CareSSMMConfig(AppConfig):
 
     def ready(self):
         import care_ssmm.signals # noqa 
+        import care_ssmm.authorizers # noqa
