@@ -1,17 +1,18 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 from django.utils.timezone import now
-
+from rest_framework.exceptions import ValidationError
 from care.emr.models import (
     ChargeItem,
     ChargeItemDefinition,
     ResourceCategory,
+    Encounter,
     TokenBooking,
 )
 from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
-from care.emr.resources.charge_item.spec import ChargeItemResourceOptions
+from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 REGISTRATION_RESOURCE_CATEGORY_SLUG_VALUE = "registration"
@@ -81,3 +82,10 @@ def handle_registration_fee(sender, instance, **kwargs):
         charge_item.service_resource = ChargeItemResourceOptions.appointment.value
         charge_item.service_resource_id = str(instance.external_id)
         charge_item.save()
+
+@receiver(pre_save, sender=Encounter)
+def disallow_encounter_unpaid(sender, instance, **kwargs):
+    if instance and instance.appointment:
+        charge_items = ChargeItem.objects.filter(service_resource=ChargeItemResourceOptions.appointment.value, service_resource_id=str(instance.appointment.external_id), status__in=[ChargeItemStatusOptions.billable.value, ChargeItemStatusOptions.billed.value]).exists()
+        if charge_items:
+            raise ValidationError("Appointment charge item must be paid before encounter can be created")
