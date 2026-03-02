@@ -89,3 +89,39 @@ def disallow_encounter_unpaid(sender, instance, **kwargs):
         charge_items = ChargeItem.objects.filter(service_resource=ChargeItemResourceOptions.appointment.value, service_resource_id=str(instance.appointment.external_id), status__in=[ChargeItemStatusOptions.billable.value, ChargeItemStatusOptions.billed.value]).exists()
         if charge_items:
             raise ValidationError("Appointment charge item must be paid before encounter can be created")
+        
+
+
+@receiver(pre_save, sender=TokenBooking)
+def check_patient_ip_exists(sender, instance,*args, **kwargs):
+    from datetime import timedelta, datetime
+    from care.utils.time_util import care_now
+    from care.emr.resources.charge_item.sync_charge_item_costs import (
+        sync_charge_item_costs,
+    )
+    from care.emr.resources.encounter.constants import ClassChoices, StatusChoices
+    if instance.id:
+        old_instance = TokenBooking.objects.only("charge_item_id").get(id=instance.id)
+        if old_instance.charge_item_id:
+            return
+    if not instance.charge_item_id:
+        return
+    patient = instance.patient
+    encounters = Encounter.objects.filter(
+        status__in=[StatusChoices.completed.value, StatusChoices.discharged.value],
+        patient=patient,
+        encounter_class=ClassChoices.imp.value,
+    ).order_by("-created_date")
+    for encounter in encounters:
+        if encounter.period and encounter.period["end"] and encounter.care_team_users:
+            end_date = datetime.fromisoformat(encounter.period["end"])
+            primary_doctor = encounter.care_team_users[0]
+            if primary_doctor != instance.token_slot.resource.user.id:
+                continue
+            if end_date > (care_now() - timedelta(days=10)):
+                charge_item = instance.charge_item
+                charge_item.quantity = 0
+                sync_charge_item_costs(charge_item)
+                charge_item.save()
+                # Make the charge item 0 and sync again
+                return
