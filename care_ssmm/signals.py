@@ -106,6 +106,7 @@ def check_patient_ip_exists(sender, instance,*args, **kwargs):
             return
     if not instance.charge_item_id:
         return
+    booking_date = instance.token_slot.start_datetime
     patient = instance.patient
     encounters = Encounter.objects.filter(
         status__in=[StatusChoices.completed.value, StatusChoices.discharged.value],
@@ -118,7 +119,7 @@ def check_patient_ip_exists(sender, instance,*args, **kwargs):
             primary_doctor = encounter.care_team_users[0]
             if primary_doctor != instance.token_slot.resource.user.id:
                 continue
-            if end_date > (care_now() - timedelta(days=10)):
+            if end_date > (booking_date - timedelta(days=10)):
                 charge_item = instance.charge_item
                 charge_item.quantity = 0
                 sync_charge_item_costs(charge_item)
