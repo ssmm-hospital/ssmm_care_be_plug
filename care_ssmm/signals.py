@@ -106,6 +106,8 @@ def check_patient_ip_exists(sender, instance,*args, **kwargs):
             return
     if not instance.charge_item_id:
         return
+    if not instance.token_slot.resource.user:
+        return
     booking_date = instance.token_slot.start_datetime
     patient = instance.patient
     encounters = Encounter.objects.filter(
