@@ -116,10 +116,10 @@ def check_patient_ip_exists(sender, instance,*args, **kwargs):
         encounter_class=ClassChoices.imp.value,
     ).order_by("-created_date")
     for encounter in encounters:
-        if encounter.period and encounter.period["end"] and encounter.care_team_users:
+        if encounter.period and encounter.period["end"] and encounter.care_team:
+            care_team_user_id = encounter.care_team[0].get("user_id" , -1)
             end_date = datetime.fromisoformat(encounter.period["end"])
-            primary_doctor = encounter.care_team_users[0]
-            if primary_doctor != instance.token_slot.resource.user.id:
+            if int(care_team_user_id) != instance.token_slot.resource.user.id:
                 continue
             if end_date > (booking_date - timedelta(days=10)):
                 charge_item = instance.charge_item
