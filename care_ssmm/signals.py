@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 from django.utils.timezone import now
@@ -9,15 +11,18 @@ from care.emr.models import (
     Encounter,
     TokenBooking,
 )
+from care.emr.models.payment_reconciliation import PaymentReconciliation
 from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
+from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 REGISTRATION_RESOURCE_CATEGORY_SLUG_VALUE = "registration"
 PRICE_COMPONENTS = [{"amount": 50, "monetary_component_type": "base"}]
 DIFF_DAYS = 180
+CASH_PAYMENT_LIMIT = Decimal("200000")
 
 
 @receiver(post_save, sender=TokenBooking)
@@ -128,3 +133,9 @@ def check_patient_ip_exists(sender, instance,*args, **kwargs):
                 charge_item.save()
                 # Make the charge item 0 and sync again
                 return
+
+
+@receiver(pre_save, sender=PaymentReconciliation)
+def block_cash_payment_above_limit(sender, instance, **kwargs):
+    if instance.method == PaymentReconciliationPaymentMethodOptions.cash.value and Decimal(instance.amount) > CASH_PAYMENT_LIMIT:
+        raise ValidationError(f"Cash payments above {CASH_PAYMENT_LIMIT} are not allowed")
