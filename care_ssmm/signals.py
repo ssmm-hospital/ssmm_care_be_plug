@@ -153,3 +153,14 @@ def block_cash_refund_above_limit(sender, instance, **kwargs):
         raise ValidationError(
             f"Cash refunds above {CASH_CREDIT_NOTE_LIMIT} are not allowed"
         )
+    
+@receiver(pre_save, sender=PaymentReconciliation)
+def block_payment_transfer_above_total_paid(sender, instance, **kwargs):
+    if (
+        instance.reconciliation_type == PaymentReconciliationTypeOptions.adjustment.value
+        and instance.is_credit_note
+        and instance.account.total_paid < Decimal(instance.amount)
+    ):
+        raise ValidationError(
+            f"Insufficient funds for payment transfer"
+        )
