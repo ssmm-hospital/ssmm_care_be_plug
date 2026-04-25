@@ -122,7 +122,7 @@ def check_patient_ip_exists(sender, instance,*args, **kwargs):
         encounter_class=ClassChoices.imp.value,
     ).order_by("-created_date")
     for encounter in encounters:
-        if encounter.period and encounter.period["end"] and encounter.care_team:
+        if encounter.period and "end" in encounter.period and encounter.period["end"] and encounter.care_team:
             care_team_user_id = encounter.care_team[0].get("user_id" , -1)
             end_date = datetime.fromisoformat(encounter.period["end"])
             if int(care_team_user_id) != instance.token_slot.resource.user.id:
