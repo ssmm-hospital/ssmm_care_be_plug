@@ -16,7 +16,7 @@ from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
-from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions
+from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 REGISTRATION_RESOURCE_CATEGORY_SLUG_VALUE = "registration"
@@ -150,16 +150,17 @@ def validate_reference_number(sender, instance, **kwargs):
     method = instance.method
     ref = instance.reference_number
 
-    if method in CARD_METHODS:
-        if not ref or len(ref) != 4:
-            raise ValidationError(
-                "Reference number must be exactly 4 characters for card payments"
-            )
-    elif method in DIRECT_DEPOSIT_METHODS:
-        if not ref or len(ref) != 5:
-            raise ValidationError(
-                "Reference number must be exactly 5 characters for direct deposit payments"
-            )
+    if instance.status == PaymentReconciliationStatusOptions.active.value:
+        if method in CARD_METHODS:
+            if not ref or len(ref) != 4:
+                raise ValidationError(
+                    "Reference number must be exactly 4 characters for card payments"
+                )
+        elif method in DIRECT_DEPOSIT_METHODS:
+            if not ref or len(ref) != 5:
+                raise ValidationError(
+                    "Reference number must be exactly 5 characters for direct deposit payments"
+                )
 
 
 @receiver(pre_save, sender=PaymentReconciliation)
