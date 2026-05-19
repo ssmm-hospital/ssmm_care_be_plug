@@ -150,17 +150,19 @@ def validate_reference_number(sender, instance, **kwargs):
     method = instance.method
     ref = instance.reference_number
 
-    if instance.status == PaymentReconciliationStatusOptions.active.value:
-        if method in CARD_METHODS:
-            if not ref or len(ref) != 4:
-                raise ValidationError(
-                    "Reference number must be exactly 4 characters for card payments"
-                )
-        elif method in DIRECT_DEPOSIT_METHODS:
-            if not ref or len(ref) != 5:
-                raise ValidationError(
-                    "Reference number must be exactly 5 characters for direct deposit payments"
-                )
+    if instance.status == PaymentReconciliationStatusOptions.cancelled.value:
+        return
+
+    if method in CARD_METHODS:
+        if not ref or len(ref) != 4:
+            raise ValidationError(
+                "Reference number must be exactly 4 characters for card payments"
+            )
+    elif method in DIRECT_DEPOSIT_METHODS:
+        if not ref or len(ref) != 5:
+            raise ValidationError(
+                "Reference number must be exactly 5 characters for direct deposit payments"
+            )
 
 
 @receiver(pre_save, sender=PaymentReconciliation)
