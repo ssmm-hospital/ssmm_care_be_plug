@@ -150,7 +150,7 @@ def validate_reference_number(sender, instance, **kwargs):
     method = instance.method
     ref = instance.reference_number
 
-    if instance.status == PaymentReconciliationStatusOptions.cancelled.value:
+    if instance.status in [PaymentReconciliationStatusOptions.cancelled.value, PaymentReconciliationStatusOptions.entered_in_error.value]:
         return
 
     if method in CARD_METHODS:
