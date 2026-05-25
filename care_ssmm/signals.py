@@ -16,7 +16,7 @@ from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
-from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions
+from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 REGISTRATION_RESOURCE_CATEGORY_SLUG_VALUE = "registration"
@@ -149,6 +149,9 @@ DIRECT_DEPOSIT_METHODS = {
 def validate_reference_number(sender, instance, **kwargs):
     method = instance.method
     ref = instance.reference_number
+
+    if instance.status in [PaymentReconciliationStatusOptions.cancelled.value, PaymentReconciliationStatusOptions.entered_in_error.value]:
+        return
 
     if method in CARD_METHODS:
         if not ref or len(ref) != 4:
