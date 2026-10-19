@@ -9,6 +9,8 @@ from care.emr.models import (
     ChargeItemDefinition,
     ResourceCategory,
     Encounter,
+    DispenseOrder,
+    MedicationDispense,
     TokenBooking,
 )
 from care.emr.models.payment_reconciliation import PaymentReconciliation
@@ -16,6 +18,7 @@ from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
+from care.emr.resources.location.spec import InventoryUsage
 from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
@@ -193,3 +196,13 @@ def block_payment_transfer_above_total_paid(sender, instance, **kwargs):
         raise ValidationError(
             f"Insufficient funds for payment transfer"
         )
+
+
+@receiver(pre_save, sender=DispenseOrder)
+@receiver(pre_save, sender=MedicationDispense)
+def block_dispense_from_non_store_location(sender, instance, **kwargs):
+    # Only creation is blocked, existing dispenses and orders can still be updated
+    if instance.id:
+        return
+    if instance.location.inventory_usage != InventoryUsage.store.value:
+        raise ValidationError("Medication can only be dispensed from a store location")
