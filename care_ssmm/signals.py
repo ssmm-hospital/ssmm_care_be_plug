@@ -214,8 +214,8 @@ def block_dispense_from_non_store_location(sender, instance, **kwargs):
         raise ValidationError("Medication can only be dispensed from a store location")
 
 
-# IP and observation bills are settled against the account at discharge,
-# so these invoices can be balanced without matching invoice payments.
+# Accounts whose primary encounter is IP or observation are settled at
+# discharge, so their invoices can be balanced without matching payments.
 IP_OBSERVATION_ENCOUNTER_CLASSES = [
     ClassChoices.imp.value,
     ClassChoices.obsenc.value,
@@ -223,16 +223,9 @@ IP_OBSERVATION_ENCOUNTER_CLASSES = [
 
 
 def is_ip_or_observation_invoice(invoice):
-    # Items added from the billing page have no encounter, so also check the
-    # encounter the account was opened for.
-    if Account.objects.filter(
+    return Account.objects.filter(
         id=invoice.account_id,
         primary_encounter__encounter_class__in=IP_OBSERVATION_ENCOUNTER_CLASSES,
-    ).exists():
-        return True
-    return ChargeItem.objects.filter(
-        id__in=invoice.charge_items,
-        encounter__encounter_class__in=IP_OBSERVATION_ENCOUNTER_CLASSES,
     ).exists()
 
 
