@@ -214,23 +214,13 @@ def block_dispense_from_non_store_location(sender, instance, **kwargs):
         raise ValidationError("Medication can only be dispensed from a store location")
 
 
-# Accounts whose primary encounter is IP or observation are settled at
-# discharge, so their invoices can be balanced without matching payments.
 IP_OBSERVATION_ENCOUNTER_CLASSES = [
     ClassChoices.imp.value,
     ClassChoices.obsenc.value,
 ]
 
 
-def is_ip_or_observation_invoice(invoice):
-    return Account.objects.filter(
-        id=invoice.account_id,
-        primary_encounter__encounter_class__in=IP_OBSERVATION_ENCOUNTER_CLASSES,
-    ).exists()
-
-
 def get_invoice_amount_paid(invoice):
-    # Counts the same payments as the invoice's total_payments - total_credit_notes
     totals = PaymentReconciliation.objects.filter(
         target_invoice=invoice,
         status=PaymentReconciliationStatusOptions.active.value,
@@ -253,11 +243,14 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
     )
     if previous_status == InvoiceStatusOptions.balanced.value:
         return
+    if Account.objects.filter(
+        id=instance.account_id,
+        primary_encounter__encounter_class__in=IP_OBSERVATION_ENCOUNTER_CLASSES,
+    ).exists():
+        return
     amount_paid = get_invoice_amount_paid(instance)
     invoice_amount = Decimal(instance.total_gross)
-    # Exact match without rounding, the same test as Care's auto-balance after a payment
-    if amount_paid == invoice_amount or is_ip_or_observation_invoice(instance):
-        return
-    raise ValidationError(
-        f"Invoice can be marked as balanced only when the amount paid ({care_round(amount_paid)}) equals the invoice amount ({care_round(invoice_amount)})"
-    )
+    if amount_paid != invoice_amount:
+        raise ValidationError(
+            f"Invoice can be marked as balanced only when the amount paid ({care_round(amount_paid)}) equals the invoice amount ({care_round(invoice_amount)})"
+        )
