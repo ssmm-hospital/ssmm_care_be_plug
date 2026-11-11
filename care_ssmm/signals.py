@@ -1,15 +1,18 @@
 from decimal import Decimal
 
+from django.db.models import Q, Sum
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 from django.utils.timezone import now
 from rest_framework.exceptions import ValidationError
 from care.emr.models import (
+    Account,
     ChargeItem,
     ChargeItemDefinition,
     ResourceCategory,
     Encounter,
     DispenseOrder,
+    Invoice,
     MedicationDispense,
     TokenBooking,
 )
@@ -18,8 +21,11 @@ from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
+from care.emr.resources.encounter.constants import ClassChoices
+from care.emr.resources.invoice.spec import InvoiceStatusOptions
 from care.emr.resources.location.spec import InventoryUsage
-from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
+from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationOutcomeOptions, PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
+from care.utils.rounding.rounding import care_round
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 REGISTRATION_RESOURCE_CATEGORY_SLUG_VALUE = "registration"
@@ -206,3 +212,58 @@ def block_dispense_from_non_store_location(sender, instance, **kwargs):
         return
     if instance.location.inventory_usage != InventoryUsage.store.value:
         raise ValidationError("Medication can only be dispensed from a store location")
+
+
+# IP and observation bills are settled against the account at discharge,
+# so these invoices can be balanced without matching invoice payments.
+IP_OBSERVATION_ENCOUNTER_CLASSES = [
+    ClassChoices.imp.value,
+    ClassChoices.obsenc.value,
+]
+
+
+def is_ip_or_observation_invoice(invoice):
+    # Items added from the billing page have no encounter, so also check the
+    # encounter the account was opened for.
+    if Account.objects.filter(
+        id=invoice.account_id,
+        primary_encounter__encounter_class__in=IP_OBSERVATION_ENCOUNTER_CLASSES,
+    ).exists():
+        return True
+    return ChargeItem.objects.filter(
+        id__in=invoice.charge_items,
+        encounter__encounter_class__in=IP_OBSERVATION_ENCOUNTER_CLASSES,
+    ).exists()
+
+
+def get_invoice_amount_paid(invoice):
+    # Counts the same payments as the invoice's total_payments - total_credit_notes
+    totals = PaymentReconciliation.objects.filter(
+        target_invoice=invoice,
+        status=PaymentReconciliationStatusOptions.active.value,
+        outcome=PaymentReconciliationOutcomeOptions.complete.value,
+    ).aggregate(
+        paid=Sum("amount", filter=Q(is_credit_note=False), default=Decimal(0)),
+        refunded=Sum("amount", filter=Q(is_credit_note=True), default=Decimal(0)),
+    )
+    return totals["paid"] - totals["refunded"]
+
+
+@receiver(pre_save, sender=Invoice)
+def block_balancing_invoice_with_payment_mismatch(sender, instance, update_fields=None, **kwargs):
+    if not instance.pk or instance.status != InvoiceStatusOptions.balanced.value:
+        return
+    if update_fields is not None and "status" not in update_fields:
+        return
+    previous_status = (
+        Invoice.objects.filter(pk=instance.pk).values_list("status", flat=True).first()
+    )
+    if previous_status == InvoiceStatusOptions.balanced.value:
+        return
+    amount_paid = care_round(get_invoice_amount_paid(instance))
+    invoice_amount = care_round(instance.total_gross)
+    if amount_paid == invoice_amount or is_ip_or_observation_invoice(instance):
+        return
+    raise ValidationError(
+        f"Invoice can be marked as balanced only when the amount paid ({amount_paid}) equals the invoice amount ({invoice_amount})"
+    )
