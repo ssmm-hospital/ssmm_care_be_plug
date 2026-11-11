@@ -25,7 +25,6 @@ from care.emr.resources.encounter.constants import ClassChoices
 from care.emr.resources.invoice.spec import InvoiceStatusOptions
 from care.emr.resources.location.spec import InventoryUsage
 from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationOutcomeOptions, PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
-from care.utils.rounding.rounding import care_round
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 REGISTRATION_RESOURCE_CATEGORY_SLUG_VALUE = "registration"
@@ -242,6 +241,12 @@ def get_invoice_amount_paid(invoice):
     return totals["paid"] - totals["refunded"]
 
 
+def format_amount(amount):
+    # Two decimals, unless that would hide a sub-paisa difference
+    rounded = amount.quantize(Decimal("0.01"))
+    return str(rounded) if rounded == amount else f"{amount.normalize():f}"
+
+
 @receiver(pre_save, sender=Invoice)
 def block_balancing_invoice_with_payment_mismatch(sender, instance, update_fields=None, **kwargs):
     if not instance.pk or instance.status != InvoiceStatusOptions.balanced.value:
@@ -253,10 +258,11 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
     )
     if previous_status == InvoiceStatusOptions.balanced.value:
         return
-    amount_paid = care_round(get_invoice_amount_paid(instance))
-    invoice_amount = care_round(instance.total_gross)
+    amount_paid = get_invoice_amount_paid(instance)
+    invoice_amount = Decimal(instance.total_gross)
+    # Exact match without rounding, the same test as Care's auto-balance after a payment
     if amount_paid == invoice_amount or is_ip_or_observation_invoice(instance):
         return
     raise ValidationError(
-        f"Invoice can be marked as balanced only when the amount paid ({amount_paid}) equals the invoice amount ({invoice_amount})"
+        f"Invoice can be marked as balanced only when the amount paid ({format_amount(amount_paid)}) equals the invoice amount ({format_amount(invoice_amount)})"
     )
