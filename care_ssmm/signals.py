@@ -18,6 +18,8 @@ from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
+from care.emr.resources.scheduling.slot.spec import CANCELLED_STATUS_CHOICES
+from care.emr.resources.scheduling.token.spec import TokenStatusOptions
 from care.emr.resources.location.spec import InventoryUsage
 from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
 
@@ -206,3 +208,9 @@ def block_dispense_from_non_store_location(sender, instance, **kwargs):
         return
     if instance.location.inventory_usage != InventoryUsage.store.value:
         raise ValidationError("Medication can only be dispensed from a store location")
+
+@receiver(pre_save, sender=TokenBooking)
+def cancel_token_when_booking_cancelled(sender, instance, **kwargs):
+    if instance.token and instance.status in CANCELLED_STATUS_CHOICES and instance.token.status != TokenStatusOptions.CANCELLED.value:
+        instance.token.status = TokenStatusOptions.CANCELLED.value
+        instance.token.save()
