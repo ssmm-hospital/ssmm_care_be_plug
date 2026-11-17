@@ -47,17 +47,9 @@ def _close_encounter(encounter_id, *, created_before):
 
         is_ip = encounter.encounter_class == ClassChoices.imp.value
         if is_ip:
-            has_non_open_account = (
-                Account.objects.filter(primary_encounter=encounter)
-                .exclude(billing_status=AccountBillingStatusOptions.open.value)
-                .exists()
-            )
-            if (
-                not has_non_open_account
-                or _open_accounts(
-                    encounter.pk, encounter.patient_id, encounter.facility_id
-                ).exists()
-            ):
+            if _open_accounts(
+                encounter.pk, encounter.patient_id, encounter.facility_id
+            ).exists():
                 return None
         elif encounter.encounter_class != ClassChoices.amb.value:
             return None
@@ -87,14 +79,10 @@ def auto_close_encounters():
     created_before = timezone.localtime(
         care_now(), timezone.get_default_timezone()
     ).replace(hour=0, minute=0, second=0, microsecond=0)
-    linked_non_open_accounts = Account.objects.filter(
-        primary_encounter_id=OuterRef("pk"),
-    ).exclude(billing_status=AccountBillingStatusOptions.open.value)
     candidates = (
         Encounter.objects.filter(created_date__lt=created_before)
         .exclude(status__in=COMPLETED_CHOICES)
         .annotate(
-            has_non_open_account=Exists(linked_non_open_accounts),
             has_open_account=Exists(
                 _open_accounts(
                     OuterRef("pk"), OuterRef("patient_id"), OuterRef("facility_id")
@@ -105,7 +93,6 @@ def auto_close_encounters():
             Q(encounter_class=ClassChoices.amb.value)
             | Q(
                 encounter_class=ClassChoices.imp.value,
-                has_non_open_account=True,
                 has_open_account=False,
             )
         )
