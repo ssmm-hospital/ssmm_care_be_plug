@@ -6,7 +6,7 @@ from care_ssmm.auto_close import auto_close_encounters
 
 @shared_task
 def auto_close_encounters_task():
-    """Run the daily OP and Care Completed IP encounter cleanup."""
+    """Run the daily OP and eligible IP encounter cleanup."""
     return auto_close_encounters()
 
 
