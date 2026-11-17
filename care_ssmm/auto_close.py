@@ -3,10 +3,7 @@ import logging
 from care.emr.api.viewsets.device import disassociate_device_from_encounter
 from care.emr.api.viewsets.location import close_related_location_from_encounter
 from care.emr.models import Account, Encounter
-from care.emr.resources.account.spec import (
-    AccountBillingStatusOptions,
-    AccountStatusOptions,
-)
+from care.emr.resources.account.spec import AccountBillingStatusOptions
 from care.emr.resources.encounter.constants import (
     COMPLETED_CHOICES,
     ClassChoices,
@@ -20,17 +17,10 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-def _open_accounts(encounter_id, patient_id, facility_id):
-    # Care also uses the patient's active open account when no account is linked.
+def _open_accounts(encounter_id):
     return Account.objects.filter(
+        primary_encounter_id=encounter_id,
         billing_status=AccountBillingStatusOptions.open.value,
-    ).filter(
-        Q(primary_encounter_id=encounter_id)
-        | Q(
-            patient_id=patient_id,
-            facility_id=facility_id,
-            status=AccountStatusOptions.active.value,
-        )
     )
 
 
@@ -47,9 +37,7 @@ def _close_encounter(encounter_id, *, created_before):
 
         is_ip = encounter.encounter_class == ClassChoices.imp.value
         if is_ip:
-            if _open_accounts(
-                encounter.pk, encounter.patient_id, encounter.facility_id
-            ).exists():
+            if _open_accounts(encounter.pk).exists():
                 return None
         elif encounter.encounter_class != ClassChoices.amb.value:
             return None
@@ -83,11 +71,7 @@ def auto_close_encounters():
         Encounter.objects.filter(created_date__lt=created_before)
         .exclude(status__in=COMPLETED_CHOICES)
         .annotate(
-            has_open_account=Exists(
-                _open_accounts(
-                    OuterRef("pk"), OuterRef("patient_id"), OuterRef("facility_id")
-                )
-            ),
+            has_open_account=Exists(_open_accounts(OuterRef("pk"))),
         )
         .filter(
             Q(encounter_class=ClassChoices.amb.value)
