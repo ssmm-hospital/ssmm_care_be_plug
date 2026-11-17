@@ -34,15 +34,14 @@ def _close_encounter(encounter_id, *, created_before):
         )
         if encounter is None or encounter.status in COMPLETED_CHOICES:
             return None
-
         is_ip = encounter.encounter_class == ClassChoices.imp.value
         if is_ip:
             if _open_accounts(encounter.pk).exists():
                 return None
         elif encounter.encounter_class != ClassChoices.amb.value:
             return None
-
-        completed_at = str(care_now())
+        modified_at = care_now()
+        completed_at = str(modified_at)
         encounter.status = StatusChoices.completed.value
         history = encounter.status_history or {}
         history["history"] = (history.get("history") or []) + [
@@ -53,12 +52,16 @@ def _close_encounter(encounter_id, *, created_before):
         if not period.get("end"):
             period["end"] = completed_at
         encounter.period = period
-        encounter.save(
-            update_fields=["status", "status_history", "period", "modified_date"]
+        encounter.modified_date = modified_at
+        # Skip save hooks/signals; update() also needs an explicit modified_date.
+        Encounter.objects.filter(pk=encounter.pk).update(
+            status=encounter.status,
+            status_history=encounter.status_history,
+            period=encounter.period,
+            modified_date=modified_at,
         )
         disassociate_device_from_encounter(encounter)
         close_related_location_from_encounter(encounter)
-
         return (0, 1) if is_ip else (1, 0)
 
 
@@ -96,7 +99,6 @@ def auto_close_encounters():
         if result is not None:
             counts["op_closed"] += result[0]
             counts["ip_closed"] += result[1]
-
     logger.info("Encounter auto-close results: %s; failures: %s", counts, failures)
     if failures:
         raise RuntimeError(f"Failed to auto-close {failures} encounter(s)")
