@@ -11,7 +11,7 @@ from care.emr.models import (
     Encounter,
     DispenseOrder,
     MedicationDispense,
-    TokenBooking,
+    TokenBooking, EMRBaseModel,
 )
 from care.emr.models.payment_reconciliation import PaymentReconciliation
 from care.emr.resources.charge_item.apply_charge_item_definition import (
@@ -211,6 +211,12 @@ def block_dispense_from_non_store_location(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=TokenBooking)
 def cancel_token_when_booking_cancelled(sender, instance, **kwargs):
-    if instance.token and instance.status in CANCELLED_STATUS_CHOICES and instance.token.status != TokenStatusOptions.CANCELLED.value:
-        instance.token.status = TokenStatusOptions.CANCELLED.value
-        instance.token.save()
+    if not instance.token_id or instance.status not in CANCELLED_STATUS_CHOICES:
+        return
+    token = instance.token
+    if token.status in [TokenStatusOptions.CANCELLED.value, TokenStatusOptions.ENTERED_IN_ERROR.value]:
+        return
+    token.status = TokenStatusOptions.CANCELLED.value
+    if instance.updated_by_id:
+        token.updated_by_id = instance.updated_by_id
+    token.save()
