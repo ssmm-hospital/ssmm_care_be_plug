@@ -21,6 +21,8 @@ from care.emr.resources.charge_item.apply_charge_item_definition import (
     apply_charge_item_definition,
 )
 from care.emr.resources.charge_item.spec import ChargeItemResourceOptions,ChargeItemStatusOptions
+from care.emr.resources.scheduling.slot.spec import CANCELLED_STATUS_CHOICES
+from care.emr.resources.scheduling.token.spec import TokenStatusOptions
 from care.emr.resources.encounter.constants import ClassChoices
 from care.emr.resources.invoice.spec import InvoiceStatusOptions
 from care.emr.resources.location.spec import InventoryUsage
@@ -212,6 +214,19 @@ def block_dispense_from_non_store_location(sender, instance, **kwargs):
         return
     if instance.location.inventory_usage != InventoryUsage.store.value:
         raise ValidationError("Medication can only be dispensed from a store location")
+
+
+@receiver(pre_save, sender=TokenBooking)
+def cancel_token_when_booking_cancelled(sender, instance, **kwargs):
+    if not instance.token_id or instance.status not in CANCELLED_STATUS_CHOICES:
+        return
+    token = instance.token
+    if token.status in [TokenStatusOptions.CANCELLED.value, TokenStatusOptions.ENTERED_IN_ERROR.value]:
+        return
+    token.status = TokenStatusOptions.CANCELLED.value
+    if instance.updated_by_id:
+        token.updated_by_id = instance.updated_by_id
+    token.save()
 
 
 IP_OBSERVATION_ENCOUNTER_CLASSES = [
