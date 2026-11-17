@@ -14,7 +14,7 @@ from care.emr.models import (
     DispenseOrder,
     Invoice,
     MedicationDispense,
-    TokenBooking, EMRBaseModel,
+    TokenBooking,
 )
 from care.emr.models.payment_reconciliation import PaymentReconciliation
 from care.emr.resources.charge_item.apply_charge_item_definition import (
