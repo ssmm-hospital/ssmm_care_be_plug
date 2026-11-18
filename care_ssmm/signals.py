@@ -267,17 +267,13 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
     amount_paid = get_invoice_amount_paid(instance)
     invoice_amount = Decimal(instance.total_gross)
     if invoice_amount < 0:
-        # Refund invoices have negative totals, and the refund (a credit note) makes the
-        # amount paid negative too. It has to be recorded in full; an advance can't pay it out.
+        # Refund invoice: the full refund must be recorded
         if amount_paid != invoice_amount:
             raise ValidationError("Record the full refund before balancing this invoice")
         return
     if amount_paid >= invoice_amount:
         return
-    # Underpaid invoices can draw on the account's advance, as long as it covers every
-    # invoice on the account. Care updates total_balance on every invoice and payment
-    # change, and counts drafts as due. The balance is rounded the way Care rounds
-    # invoice totals (half up to whole rupees), which is also how the UI shows it.
+    # Underpaid: the account's advance must cover all its invoices, rounded like invoice totals
     account_balance = care_round(
         instance.account.total_balance,
         precision=settings.INVOICE_FINAL_AMOUNT_PRECISION,
