@@ -27,7 +27,6 @@ from care.emr.resources.encounter.constants import ClassChoices
 from care.emr.resources.invoice.spec import InvoiceStatusOptions
 from care.emr.resources.location.spec import InventoryUsage
 from care.emr.resources.payment_reconciliation.spec import PaymentReconciliationOutcomeOptions, PaymentReconciliationPaymentMethodOptions, PaymentReconciliationTypeOptions, PaymentReconciliationStatusOptions
-from care.utils.rounding.rounding import care_round
 
 SYSTEM_REGISTRATION_FEE_CHARGE_ITEM_DEFINITION_SLUG = "i-system:registration-fee"
 REGISTRATION_RESOURCE_CATEGORY_SLUG_VALUE = "registration"
@@ -265,7 +264,10 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
         return
     amount_paid = get_invoice_amount_paid(instance)
     invoice_amount = Decimal(instance.total_gross)
-    if amount_paid != invoice_amount:
-        raise ValidationError(
-            f"Invoice can be marked as balanced only when the amount paid ({care_round(amount_paid)}) equals the invoice amount ({care_round(invoice_amount)})"
-        )
+    if amount_paid >= invoice_amount:
+        return
+    # Underpaid invoices can draw on the account's advance, as long as it covers every
+    # invoice on the account. Care updates total_balance on every invoice and payment
+    # change, and counts drafts as due.
+    if instance.account.total_balance > 0:
+        raise ValidationError("Insufficient payment or advance to balance this invoice")
