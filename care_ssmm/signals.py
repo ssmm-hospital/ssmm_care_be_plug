@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Q, Sum
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
@@ -253,6 +254,9 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
         return
     if update_fields is not None and "status" not in update_fields:
         return
+    # Return invoices aren't checked
+    if instance.is_refund:
+        return
     previous_status = (
         Invoice.objects.filter(pk=instance.pk).values_list("status", flat=True).first()
     )
@@ -265,7 +269,13 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
         return
     amount_paid = get_invoice_amount_paid(instance)
     invoice_amount = Decimal(instance.total_gross)
-    if amount_paid != invoice_amount:
-        raise ValidationError(
-            f"Invoice can be marked as balanced only when the amount paid ({care_round(amount_paid)}) equals the invoice amount ({care_round(invoice_amount)})"
-        )
+    if amount_paid >= invoice_amount:
+        return
+    # Underpaid: the account's advance must cover all its invoices, rounded like invoice totals
+    account_balance = care_round(
+        instance.account.total_balance,
+        precision=settings.INVOICE_FINAL_AMOUNT_PRECISION,
+        care_method=settings.INVOICE_FINAL_AMOUNT_ROUNDING_METHOD,
+    )
+    if account_balance > 0:
+        raise ValidationError("Insufficient payment or advance to balance this invoice")
