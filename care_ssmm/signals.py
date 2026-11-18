@@ -254,6 +254,9 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
         return
     if update_fields is not None and "status" not in update_fields:
         return
+    # Return invoices aren't checked
+    if instance.is_refund:
+        return
     previous_status = (
         Invoice.objects.filter(pk=instance.pk).values_list("status", flat=True).first()
     )
@@ -266,11 +269,6 @@ def block_balancing_invoice_with_payment_mismatch(sender, instance, update_field
         return
     amount_paid = get_invoice_amount_paid(instance)
     invoice_amount = Decimal(instance.total_gross)
-    if invoice_amount < 0:
-        # Refund invoice: the full refund must be recorded
-        if amount_paid != invoice_amount:
-            raise ValidationError("Record the full refund before balancing this invoice")
-        return
     if amount_paid >= invoice_amount:
         return
     # Underpaid: the account's advance must cover all its invoices, rounded like invoice totals
